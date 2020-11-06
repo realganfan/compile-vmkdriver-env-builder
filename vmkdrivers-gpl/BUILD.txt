@@ -1,0 +1,25 @@
+The following assumes the files disclosed for this package have been copied
+to the directory "/tmp", and any commands that need to be executed for the
+disclosure should be executed from this directory on a  "centos-5.8-x64"
+system (see the file "SYSTEMS.txt" for definition of this system).
+
+This package should be built on a "centos-5.8-x64" system.  Please see the
+"System Configurations" document for a definition of the configuration of
+this system type.
+
+To build this package please execute the following commands:
+
+    tar xzf vmkdrivers-gpl.tgz
+    sh ./build-vmkdrivers.sh
+    mv collect-drivers.sh BLD/build/collect-drivers.sh
+    cd BLD/build
+    sh ./collect-drivers.sh
+
+If you would like to verify the installation of this package, please
+create the binary disclosure file for this package using the command:
+
+    tar rf vmkdrivers-gpl.tar -C BLD/build drivers
+
+    tar rf vmkdrivers-gpl.tar update-drivers.py
+
+The file vmkdrivers-gpl.tar is used in the installation instructions.

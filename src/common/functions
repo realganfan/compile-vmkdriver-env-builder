@@ -1,0 +1,204 @@
+# This file contains common variable and function definitions used to build
+# most tools/libraries.
+
+
+TROOT=/build/toolchain
+
+SRCDIR=$PWD
+COMMONDIR=$SRCDIR/../common
+
+# Translate short platform alias to long name
+#
+# Use i686-apple-darwin8 instead of i686-darwin8, although Hao still
+# believes that they are completely equal. And compilers built using
+# i686-darwin8 work just fine.
+#
+tc_pflong() {
+   case "$1" in
+      lin32) echo i686-linux ;;
+      lin64) echo x86_64-linux ;;
+      win32) echo i686-windows ;;
+      win64) echo x86_64-windows ;;
+      mac32) echo i686-apple-darwin8 ;;
+      mac64) echo x86_64-apple-darwin9 ;;
+      sol32) echo i686-solaris2.10 ;;
+      sol64) echo x86_64-solaris2.10 ;;
+      noarch) echo noarch ;;
+      *) echo "Unknown platform: $1" >& 2; exit 1 ;;
+   esac
+}
+
+
+# Translate long platform name to shorter alias
+tc_pfshort() {
+   case "$1" in
+      i686-linux)      echo lin32 ;;
+      x86_64-linux)    echo lin64 ;;
+      i686-windows)    echo win32 ;;
+      x86_64-windows)    echo win64 ;;
+      i686-apple-darwin8) echo mac32 ;;
+      x86_64-apple-darwin9) echo mac64 ;;
+      i686-solaris*)   echo sol32 ;;
+      x86_64-solaris*) echo sol64 ;;
+      noarch)          echo noarch ;;
+      *) echo "Unknown platform: $1" >& 2; exit 1 ;;
+   esac
+}
+
+
+# This is our own config.guess. For example we'd like to call 32-bit Linux
+# "i686-linux" as opposed to "i686-pc-linux-gnu" as determined by config.guess.
+tc_hosttype() {
+   case $(uname -sm) in
+      "Linux i686")   echo i686-linux ;;
+      "Linux x86_64") echo x86_64-linux ;;
+      "Darwin i386")  echo i686-apple-darwin8 ;;
+      "Solaris i686") echo i686-solaris2.10 ;;
+      "Solaris x86_64") echo x86_64-solaris2.10 ;;
+      *) echo "Unknown platform: $S" >& 2; exit 1 ;;
+   esac
+}
+
+
+# Returns the tools directory for current host. For example, on lin32 host
+# $TROOT/lin32 would be returned.
+tc_hostroot() {
+   echo $TROOT/$(tc_pfshort $(tc_hosttype))
+}
+
+
+# Returns the tools directory for given target. For example, for lin64 target
+# $TROOT/lin64 would be returned.
+tc_targetroot() {
+   echo $TROOT/$(tc_pfshort $1)
+}
+
+
+# Returns libc path. This function should be obsoleted.
+tc_sysroot() {
+   case "$1" in
+      i686-linux)       echo $TROOT/lin32/glibc-2.2.5-44 ;;
+      x86_64-linux)     echo $TROOT/lin64/glibc-2.3.4-2.41 ;;
+      *) echo "Unknown platform: $1" >& 2; exit 1 ;;
+   esac
+}
+
+
+# Translate target given (from command line) to canonical name
+# This should be the ONLY function that accepts '' as a valid argument.
+tc_target() {
+   case "$1" in
+      ''                      ) echo $(tc_hosttype) ;;
+      i686-linux  | lin32     ) echo i686-linux ;;
+      i686-linux3.8           ) echo i686-linux3.8 ;;
+      i686-linux5.0           ) echo i686-linux5.0 ;;
+      x86_64-linux     | lin64) echo x86_64-linux ;;
+      x86_64-linux5.0         ) echo x86_64-linux5.0 ;;
+      i686-windows     | win32) echo i686-windows ;;
+      x86_64-windows     | win64) echo x86_64-windows ;;
+      i686-apple-darwin8 | mac32) echo i686-apple-darwin8 ;;
+      i686-apple-darwin9      ) echo i686-apple-darwin9 ;;
+      x86-64-apple-darwin9 | mac64) echo x86_64-apple-darwin9 ;;
+      i686-linux4.7           ) echo i686-linux4.7 ;;
+      x86_64-linux4.7         ) echo x86_64-linux4.7 ;;
+      i686-linux6.0           ) echo i686-linux6.0 ;;
+      x86_64-linux6.0         ) echo x86_64-linux6.0 ;;
+      noarch)                   echo noarch ;;
+      i686-solaris2.10 | sol32) echo i686-solaris2.10 ;;
+      x86_64-solaris2.10 | sol64      ) echo x86_64-solaris2.10 ;;
+      i686-solaris2.11        ) echo i686-solaris2.11 ;;
+      i686-solaris2.11_91     ) echo i686-solaris2.11_91 ;;
+      i686-solaris2.11_1111     ) echo i686-solaris2.11_1111 ;;
+      i686-freebsd6.3         ) echo i686-freebsd6.3 ;;
+      x86_64-freebsd6.3       ) echo x86_64-freebsd6.3 ;;
+      *) echo "Unknown platform: $1" >& 2; exit 1 ;;
+   esac
+}
+
+
+# Return PREFIX for given platform. For example, for foo-1.23 for lin64 target
+# $TROOT/lin64/foo-1.23 would be returned.
+tc_prefix() {
+   echo $TROOT/$(tc_pfshort $1)/$(basename $(pwd))
+}
+
+
+# Returns PATH for given platform
+tc_path() {
+   case "$1" in
+      i686-linux)       echo "/bin:/usr/bin" ;;
+      x86_64-linux)     echo "/bin:/usr/bin" ;;
+      i686-apple-darwin8) echo "/bin:/usr/bin" ;;
+      noarch )          echo "/bin:/usr/bin" ;;
+      i686-solaris2.10) echo "$TROOT/lin32/binutils-22/bin:$TROOT/lin32/gcc-4.1.1/bin:/bin:/usr/bin" ;;
+      x86_64-solaris2.10) ;;
+      *) echo "Unknown platform: $1" >& 2; exit 1 ;;
+   esac
+}
+
+
+# Extract the source tarball.
+# Input: $NAME, $VERSION
+tc_extract() {
+   rm -rfv $NAME-$VERSION
+   if [ -f $NAME-$VERSION.tar.xz ]; then
+      /build/toolchain/$(tc_pfshort $(tc_hosttype))/tar-1.23/bin/tar -xJf $NAME-$VERSION.tar.xz
+   elif [ -f $NAME-$VERSION.tar.bz2 ]; then
+      tar jvxf $NAME-$VERSION.tar.bz2
+   elif [ -f $NAME-$VERSION.tbz ]; then
+      tar jvxf $NAME-$VERSION.tbz
+   elif [ -f $NAME-$VERSION.tar.gz ]; then
+      tar zvxf $NAME-$VERSION.tar.gz
+   elif [ -f $NAME-$VERSION.tgz ]; then
+      tar zvxf $NAME-$VERSION.tgz
+   elif [ -f $NAME-$VERSION.zip ]; then
+      unzip $NAME-$VERSION.zip
+   else
+      echo "No source file for $NAME-$VERSION"
+      exit 1
+   fi
+}
+
+
+# Apply the patches.
+# Input: $NAME, $VERSION
+tc_patch() {
+   pushd $NAME-$VERSION
+   for i in "$@"; do
+      patch -p1 < ../$i
+   done
+   popd
+}
+
+
+# Run "configure".
+# Input: $NAME, $VERSION, $PREFIX
+tc_configure() {
+   # Filter out "--host=" option for native builds.
+   # The option must be the very first one for this to work.
+   if [ "$1" = "--host=$(tc_hosttype)" ] || [ "$1" = "--host=" ]; then
+      shift
+   fi
+   pushd $NAME-$VERSION
+   ./configure --prefix=$PREFIX --disable-nls --with-pic "$@"
+   popd
+}
+
+
+# Do "make".
+# Input: $NAME, $VERSION
+tc_make() {
+   pushd $NAME-$VERSION
+   make "$@"
+   popd
+}
+
+
+# Do "make install".
+# Input: $NAME, $VERSION, $PREFIX
+tc_install() {
+   rm -rfv $PREFIX
+   pushd $NAME-$VERSION
+   make install "$@"
+   popd
+}

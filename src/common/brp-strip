@@ -1,0 +1,23 @@
+#!/bin/sh
+
+# Adapted from /usr/lib/rpm/brp-strip
+
+set -e
+
+if [ $# = 0 ]; then
+	exit 0
+fi
+
+if [ "$BUVER" = "" ]; then
+	BUVER=2.22
+fi
+
+STRIP=/build/toolchain/lin64/binutils-$BUVER/bin/$TARGET-strip
+
+# Strip ELF binaries
+for f in `find $@ -type f \( -perm -0100 -or -perm -0010 -or -perm -0001 \) -exec file {} \; | \
+	grep -v ' shared object,' | \
+	sed -n -e 's/^\(.*\):[ 	]*ELF.*, not stripped/\1/p'`; do
+	echo "$TARGET-strip -g $f"
+	$STRIP -g "$f"
+done
