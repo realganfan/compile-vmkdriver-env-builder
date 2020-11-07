@@ -1,0 +1,189 @@
+diff --git a/gcc/asan.c b/gcc/asan.c
+index f05e36c..9c0735d 100644
+--- a/gcc/asan.c
++++ b/gcc/asan.c
+@@ -309,6 +309,13 @@ asan_clear_shadow (rtx shadow_mem, HOST_WIDE_INT len)
+   add_reg_note (jump, REG_BR_PROB, GEN_INT (REG_BR_PROB_BASE * 80 / 100));
+ }
+ 
++static unsigned HOST_WIDE_INT asan_shadow_offset;
++
++void init_asan (void)
++{
++  asan_shadow_offset = targetm.asan_shadow_offset ();
++}
++
+ /* Insert code to protect stack vars.  The prologue sequence should be emitted
+    directly, epilogue sequence returned.  BASE is the register holding the
+    stack base, against which OFFSETS array offsets are relative to, OFFSETS
+@@ -376,7 +383,7 @@ asan_emit_stack_protection (rtx base, HOST_WIDE_INT *offsets, tree *decls,
+ 			      GEN_INT (ASAN_SHADOW_SHIFT),
+ 			      NULL_RTX, 1, OPTAB_DIRECT);
+   shadow_base = expand_binop (Pmode, add_optab, shadow_base,
+-			      GEN_INT (targetm.asan_shadow_offset ()),
++			      GEN_INT (asan_shadow_offset),
+ 			      NULL_RTX, 1, OPTAB_DIRECT);
+   gcc_assert (asan_shadow_set != -1
+ 	      && (ASAN_RED_ZONE_SIZE >> ASAN_SHADOW_SHIFT) == 4);
+@@ -692,6 +699,8 @@ build_check_stmt (location_t location, tree base, gimple_stmt_iterator *iter,
+   tree shadow_type = TREE_TYPE (shadow_ptr_type);
+   tree uintptr_type
+     = build_nonstandard_integer_type (TYPE_PRECISION (TREE_TYPE (base)), 1);
++  tree intptr_type
++    = build_nonstandard_integer_type (TYPE_PRECISION (TREE_TYPE (base)), 0);
+   tree base_ssa = base;
+ 
+   /* Get an iterator on the point where we can add the condition
+@@ -716,23 +725,29 @@ build_check_stmt (location_t location, tree base, gimple_stmt_iterator *iter,
+     }
+ 
+   g = gimple_build_assign_with_ops (NOP_EXPR,
+-				    make_ssa_name (uintptr_type, NULL),
++				    make_ssa_name (intptr_type, NULL),
+ 				    base_ssa, NULL_TREE);
+   gimple_set_location (g, location);
+   gsi_insert_after (&gsi, g, GSI_NEW_STMT);
+   base_addr = gimple_assign_lhs (g);
+ 
+   /* Build
+-     (base_addr >> ASAN_SHADOW_SHIFT) + targetm.asan_shadow_offset ().  */
++     (base_addr >> ASAN_SHADOW_SHIFT) + asan_shadow_offset.  */
+ 
+-  t = build_int_cst (uintptr_type, ASAN_SHADOW_SHIFT);
++  t = build_int_cst (intptr_type, ASAN_SHADOW_SHIFT);
+   g = gimple_build_assign_with_ops (RSHIFT_EXPR,
+-				    make_ssa_name (uintptr_type, NULL),
++				    make_ssa_name (intptr_type, NULL),
+ 				    base_addr, t);
+   gimple_set_location (g, location);
+   gsi_insert_after (&gsi, g, GSI_NEW_STMT);
+ 
+-  t = build_int_cst (uintptr_type, targetm.asan_shadow_offset ());
++  g = gimple_build_assign_with_ops (NOP_EXPR,
++				    make_ssa_name (uintptr_type, NULL),
++				    gimple_assign_lhs (g), NULL_TREE);
++  gimple_set_location (g, location);
++  gsi_insert_after (&gsi, g, GSI_NEW_STMT);
++
++  t = build_int_cst (uintptr_type, asan_shadow_offset);
+   g = gimple_build_assign_with_ops (PLUS_EXPR,
+ 				    make_ssa_name (uintptr_type, NULL),
+ 				    gimple_assign_lhs (g), t);
+@@ -769,10 +784,10 @@ build_check_stmt (location_t location, tree base, gimple_stmt_iterator *iter,
+       t = gimple_assign_lhs (g);
+ 
+       g = gimple_build_assign_with_ops (BIT_AND_EXPR,
+-					make_ssa_name (uintptr_type,
++					make_ssa_name (intptr_type,
+ 						       NULL),
+ 					base_addr,
+-					build_int_cst (uintptr_type, 7));
++					build_int_cst (intptr_type, 7));
+       gimple_set_location (g, location);
+       gsi_insert_after (&gsi, g, GSI_NEW_STMT);
+ 
+diff --git a/gcc/asan.h b/gcc/asan.h
+index 62dbe98..011202a 100644
+--- a/gcc/asan.h
++++ b/gcc/asan.h
+@@ -21,6 +21,7 @@ along with GCC; see the file COPYING3.  If not see
+ #ifndef TREE_ASAN
+ #define TREE_ASAN
+ 
++extern void init_asan (void);
+ extern void asan_finish_file (void);
+ extern rtx asan_emit_stack_protection (rtx, HOST_WIDE_INT *, tree *, int);
+ extern bool asan_protect_global (tree);
+diff --git a/gcc/c-family/c-opts.c b/gcc/c-family/c-opts.c
+index 1a922a8..ca1093f 100644
+--- a/gcc/c-family/c-opts.c
++++ b/gcc/c-family/c-opts.c
+@@ -42,6 +42,7 @@ along with GCC; see the file COPYING3.  If not see
+ 				   TARGET_FLT_EVAL_METHOD_NON_DEFAULT and
+ 				   TARGET_OPTF.  */
+ #include "tm_p.h"		/* For C_COMMON_OVERRIDE_OPTIONS.  */
++#include "asan.h"
+ 
+ #ifndef DOLLARS_IN_IDENTIFIERS
+ # define DOLLARS_IN_IDENTIFIERS true
+@@ -1017,6 +1018,8 @@ c_common_init (void)
+       return false;
+     }
+ 
++  init_asan ();
++
+   return true;
+ }
+ 
+diff --git a/gcc/common.opt b/gcc/common.opt
+index b6592e0..79493bd 100644
+--- a/gcc/common.opt
++++ b/gcc/common.opt
+@@ -844,6 +844,10 @@ fsanitize=address
+ Common Report Var(flag_asan)
+ Enable AddressSanitizer, a memory error detector
+ 
++fasan-offset=
++Common Joined Host_Wide_Int Var(asan_offset)
++AddressSanitizer shadow offset.
++
+ fsanitize=thread
+ Common Report Var(flag_tsan)
+ Enable ThreadSanitizer, a data race detector
+diff --git a/gcc/config/i386/i386.c b/gcc/config/i386/i386.c
+index acdfa6c..335e689 100644
+--- a/gcc/config/i386/i386.c
++++ b/gcc/config/i386/i386.c
+@@ -5436,6 +5436,18 @@ ix86_legitimate_combined_insn (rtx insn)
+ static unsigned HOST_WIDE_INT
+ ix86_asan_shadow_offset (void)
+ {
++  if (asan_offset != NULL)
++    {
++      unsigned HOST_WIDE_INT offset;
++      char *end_asan_offset;
++      errno = 0;
++      offset = strtoull (asan_offset, &end_asan_offset, 0);
++      if (*end_asan_offset == '\0' && errno == 0)
++        return offset;
++      else
++        error ("argument %qs to %<-fasan-offset%> is not a valid number", asan_offset);
++    }
++
+   return TARGET_LP64 ? (TARGET_MACHO ? (HOST_WIDE_INT_1 << 44)
+ 				     : HOST_WIDE_INT_C (0x7fff8000))
+ 		     : (HOST_WIDE_INT_1 << 29);
+ }
+ 
+diff --git a/gcc/testsuite/c-c++-common/asan/asan-offset-1.c b/gcc/testsuite/c-c++-common/asan/asan-offset-1.c
+new file mode 100644
+index 0000000..cf707c2
+--- /dev/null
++++ b/gcc/testsuite/c-c++-common/asan/asan-offset-1.c
+@@ -0,0 +1,10 @@
++/* { dg-do compile } */
++/* { dg-options "-fasan-offset=0xabcd -fno-builtin-malloc -fno-builtin-free" } */
++
++#include <stdlib.h>
++int main() {
++  char *x = (char*)malloc(10);
++  return x[5];
++}
++
++/* { dg-final { scan-assembler "0xabcd" } } */
+diff --git a/gcc/testsuite/c-c++-common/asan/asan-offset-2.c b/gcc/testsuite/c-c++-common/asan/asan-offset-2.c
+new file mode 100644
+index 0000000..dc794ed
+--- /dev/null
++++ b/gcc/testsuite/c-c++-common/asan/asan-offset-2.c
+@@ -0,0 +1,10 @@
++/* { dg-do compile } */
++/* { dg-options "-fasan-offset=notvalid -fno-builtin-malloc -fno-builtin-free" } */
++
++#include <stdlib.h>
++int main() {
++  char *x = (char*)malloc(10);
++  return x[5];
++}
++
++/* { dg-message "argument .notvalid. to .-fasan-offset. is not a valid number" "f" { target *-*-* } 0 } */
