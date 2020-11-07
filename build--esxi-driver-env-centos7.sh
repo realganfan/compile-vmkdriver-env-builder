@@ -3,6 +3,7 @@
 chmod 755 ./src/binutils-2.22/*.sh ./src/gcc-4.8.0/*.sh ./src/glibc-2.3.4-2.41/*.sh ./src/common/brp*
 yum -y groupinstall 'Development Tools'
 yum -y install ncurses-devel
+yum -y install wget
 
 rm -rf /build/toolchain/*
 mkdir -p /build/toolchain/src
@@ -23,6 +24,7 @@ cd binutils-2.22
 cd ..
 
 cd gcc-4.8.0
+wget https://ftp.gnu.org/gnu/gcc/gcc-4.8.0/gcc-4.8.0.tar.gz
 ./install.sh
 cd ..
 
