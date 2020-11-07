@@ -1,0 +1,230 @@
+commit edef59848ef4787e9348907aeed60c7dc8f2acbd
+Author: Xavier Deguillard <xdeguillard@vmware.com>
+Date:   Thu Feb 21 12:01:39 2013 -0800
+
+    Add support for smallhigh memory model.
+
+diff --git a/gcc/config/i386/i386-opts.h b/gcc/config/i386/i386-opts.h
+index 11c0845..95a64aa 100644
+--- a/gcc/config/i386/i386-opts.h
++++ b/gcc/config/i386/i386-opts.h
+@@ -61,6 +61,7 @@ enum tls_dialect
+ enum cmodel {
+   CM_32,	/* The traditional 32-bit ABI.  */
+   CM_SMALL,	/* Assumes all code and data fits in the low 31 bits.  */
++  CM_SMALLHIGH,	/* Assumes code+data fits in a 31 bit region; no plt/got. */
+   CM_KERNEL,	/* Assumes all code and data fits in the high 31 bits.  */
+   CM_MEDIUM,	/* Assumes code fits in the low 31 bits; data unlimited.  */
+   CM_LARGE,	/* No assumptions.  */
+diff --git a/gcc/config/i386/i386.c b/gcc/config/i386/i386.c
+index acdfa6c..7261c21 100644
+--- a/gcc/config/i386/i386.c
++++ b/gcc/config/i386/i386.c
+@@ -3180,6 +3180,14 @@ ix86_option_override_internal (bool main_args_p)
+ 		   "small", "32");
+ 	  break;
+ 
++        case CM_SMALLHIGH:
++          if (flag_pic)
++            error ("code model %qs does not support PIC mode", "smallhigh");
++          if (!TARGET_64BIT)
++            error ("code model %qs not supported in the %s bit mode",
++                   "smallhigh", "32");
++          break;
++
+ 	case CM_MEDIUM:
+ 	case CM_MEDIUM_PIC:
+ 	  if (flag_pic)
+@@ -12078,7 +12086,8 @@ legitimate_pic_address_disp_p (rtx disp)
+ 	  /* TLS references should always be enclosed in UNSPEC.  */
+ 	  if (SYMBOL_REF_TLS_MODEL (op0))
+ 	    return false;
+-	  if (!SYMBOL_REF_FAR_ADDR_P (op0) && SYMBOL_REF_LOCAL_P (op0)
++	  if (!SYMBOL_REF_FAR_ADDR_P (op0)
++              && (SYMBOL_REF_LOCAL_P (op0) || ix86_cmodel == CM_SMALLHIGH)
+ 	      && ix86_cmodel != CM_LARGE_PIC)
+ 	    return true;
+ 	  break;
+@@ -12413,7 +12422,9 @@ ix86_legitimate_address_p (enum machine_mode mode ATTRIBUTE_UNUSED,
+ 	/* Displacement is not constant.  */
+ 	return false;
+       else if (TARGET_64BIT
+-	       && !x86_64_immediate_operand (disp, VOIDmode))
++	       && !x86_64_immediate_operand (disp, VOIDmode)
++	       && !(ix86_cmodel == CM_SMALLHIGH && !base && !index
++		    && legitimate_pic_address_disp_p(disp)))
+ 	/* Displacement is out of range.  */
+ 	return false;
+     }
+diff --git a/gcc/config/i386/i386.opt b/gcc/config/i386/i386.opt
+index 084a248..c8449fa 100644
+--- a/gcc/config/i386/i386.opt
++++ b/gcc/config/i386/i386.opt
+@@ -155,6 +155,9 @@ EnumValue
+ Enum(cmodel) String(small) Value(CM_SMALL)
+ 
+ EnumValue
++Enum(cmodel) String(smallhigh) Value(CM_SMALLHIGH)
++
++EnumValue
+ Enum(cmodel) String(medium) Value(CM_MEDIUM)
+ 
+ EnumValue
+diff --git a/gcc/config/i386/predicates.md b/gcc/config/i386/predicates.md
+index f5657b9..b2a029c 100644
+--- a/gcc/config/i386/predicates.md
++++ b/gcc/config/i386/predicates.md
+@@ -350,6 +350,8 @@
+ (define_predicate "pic_32bit_operand"
+   (match_code "const,symbol_ref,label_ref")
+ {
++  if (ix86_cmodel == CM_SMALLHIGH)
++    return constant_address_p(op);
+   if (!flag_pic)
+     return false;
+ 
+diff --git a/gcc/testsuite/gcc.dg/smallhigh-1.c b/gcc/testsuite/gcc.dg/smallhigh-1.c
+new file mode 100644
+index 0000000..f93ddf4
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/smallhigh-1.c
+@@ -0,0 +1,12 @@
++/* { dg-do compile { target i?86-*-* x86_64-*-* } } */
++/* { dg-options "-O1 -m64 -mcmodel=smallhigh" } */
++
++int foo(void);
++
++int bar(void)
++{
++   return foo() + 1;
++}
++
++/* { dg-final { scan-assembler-not "PLT|GOT" } } */
++/* { dg-final { scan-assembler-not "movabs" } } */
+diff --git a/gcc/testsuite/gcc.dg/smallhigh-2.c b/gcc/testsuite/gcc.dg/smallhigh-2.c
+new file mode 100644
+index 0000000..86f5640
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/smallhigh-2.c
+@@ -0,0 +1,13 @@
++/* { dg-do compile { target i?86-*-* x86_64-*-* } } */
++/* { dg-options "-O1 -m64 -mcmodel=smallhigh" } */
++
++int foo(void);
++
++int (*bar(void))(void)
++{
++   return foo;
++}
++
++/* { dg-final { scan-assembler-not "PLT|GOT" } } */
++/* { dg-final { scan-assembler-not "movabs" } } */
++/* { dg-final { scan-assembler "\\(%rip\\)" } } */
+diff --git a/gcc/testsuite/gcc.dg/smallhigh-3.c b/gcc/testsuite/gcc.dg/smallhigh-3.c
+new file mode 100644
+index 0000000..1ee74c5
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/smallhigh-3.c
+@@ -0,0 +1,12 @@
++/* { dg-do compile { target i?86-*-* x86_64-*-* } } */
++/* { dg-options "-O1 -m64 -mcmodel=smallhigh" } */
++extern int foo;
++
++int bar(void)
++{
++   return foo;
++}
++
++/* { dg-final { scan-assembler-not "PLT|GOT" } } */
++/* { dg-final { scan-assembler-not "movabs" } } */
++/* { dg-final { scan-assembler "\\(%rip\\)" } } */
+diff --git a/gcc/testsuite/gcc.dg/smallhigh-4.c b/gcc/testsuite/gcc.dg/smallhigh-4.c
+new file mode 100644
+index 0000000..c59865f
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/smallhigh-4.c
+@@ -0,0 +1,12 @@
++/* { dg-do compile { target i?86-*-* x86_64-*-* } } */
++/* { dg-options "-O1 -m64 -mcmodel=smallhigh" } */
++extern int foo;
++
++int *bar(void)
++{
++   return &foo;
++}
++
++/* { dg-final { scan-assembler-not "PLT|GOT" } } */
++/* { dg-final { scan-assembler-not "movabs" } } */
++/* { dg-final { scan-assembler "\\(%rip\\)" } } */
+diff --git a/gcc/testsuite/gcc.dg/smallhigh-5.c b/gcc/testsuite/gcc.dg/smallhigh-5.c
+new file mode 100644
+index 0000000..d931df5
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/smallhigh-5.c
+@@ -0,0 +1,12 @@
++/* { dg-do compile { target i?86-*-* x86_64-*-* } } */
++/* { dg-options "-O1 -m64 -mcmodel=smallhigh" } */
++extern int foo[];
++
++int bar(void)
++{
++   return foo[(1<<24) / sizeof(int) - 1];
++}
++
++/* { dg-final { scan-assembler-not "PLT|GOT" } } */
++/* { dg-final { scan-assembler-not "movabs" } } */
++/* { dg-final { scan-assembler "\\(%rip\\)" } } */
+diff --git a/gcc/testsuite/gcc.dg/smallhigh-6.c b/gcc/testsuite/gcc.dg/smallhigh-6.c
+new file mode 100644
+index 0000000..8398971
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/smallhigh-6.c
+@@ -0,0 +1,12 @@
++/* { dg-do compile { target i?86-*-* x86_64-*-* } } */
++/* { dg-options "-O1 -m64 -mcmodel=smallhigh" } */
++extern int foo[];
++
++int *bar(void)
++{
++   return &foo[(1<<24) / sizeof(int) - 1];
++}
++
++/* { dg-final { scan-assembler-not "PLT|GOT" } } */
++/* { dg-final { scan-assembler-not "movabs" } } */
++/* { dg-final { scan-assembler "\\(%rip\\)" } } */
+diff --git a/gcc/testsuite/gcc.dg/smallhigh-7.c b/gcc/testsuite/gcc.dg/smallhigh-7.c
+new file mode 100644
+index 0000000..e0842a7
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/smallhigh-7.c
+@@ -0,0 +1,12 @@
++/* { dg-do compile { target i?86-*-* x86_64-*-* } } */
++/* { dg-options "-O1 -m64 -mcmodel=smallhigh" } */
++extern int foo[];
++
++int bar(void)
++{
++   return foo[(1<<24) / sizeof(int)];
++}
++
++/* { dg-final { scan-assembler-not "PLT|GOT" } } */
++/* { dg-final { scan-assembler "movabs" } } */
++/* { dg-final { scan-assembler-not "\\(%rip\\)" } } */
+diff --git a/gcc/testsuite/gcc.dg/smallhigh-8.c b/gcc/testsuite/gcc.dg/smallhigh-8.c
+new file mode 100644
+index 0000000..04841e3
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/smallhigh-8.c
+@@ -0,0 +1,12 @@
++/* { dg-do compile { target i?86-*-* x86_64-*-* } } */
++/* { dg-options "-O1 -m64 -mcmodel=smallhigh" } */
++extern int foo[];
++
++int *bar(void)
++{
++   return &foo[(1<<24) / sizeof(int)];
++}
++
++/* { dg-final { scan-assembler-not "PLT|GOT" } } */
++/* { dg-final { scan-assembler "movabs" } } */
++/* { dg-final { scan-assembler-not "\\(%rip\\)" } } */

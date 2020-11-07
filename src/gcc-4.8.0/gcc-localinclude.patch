@@ -1,0 +1,25 @@
+--- gcc-5363/gcc/Makefile.in.orig	Tue Mar 13 14:21:24 2007
++++ gcc-5363/gcc/Makefile.in	Tue Mar 13 15:26:46 2007
+@@ -2770,7 +2770,6 @@
+   -DGPLUSPLUS_INCLUDE_DIR=\"$(gcc_gxx_include_dir)\" \
+   -DGPLUSPLUS_TOOL_INCLUDE_DIR=\"$(gcc_gxx_include_dir)/$(target_noncanonical)\" \
+   -DGPLUSPLUS_BACKWARD_INCLUDE_DIR=\"$(gcc_gxx_include_dir)/backward\" \
+-  -DLOCAL_INCLUDE_DIR=\"$(local_includedir)\" \
+   -DCROSS_INCLUDE_DIR=\"$(CROSS_SYSTEM_HEADER_DIR)\" \
+   -DTOOL_INCLUDE_DIR=\"$(gcc_tooldir)/include\" \
+   @TARGET_SYSTEM_ROOT_DEFINE@
+--- gcc-5363/gcc/cppdefault.c.orig	Fri Mar  4 12:17:11 2005
++++ gcc-5363/gcc/cppdefault.c	Tue Mar 13 15:27:48 2007
+@@ -59,11 +59,6 @@
+     /* This is the dir for gcc's private headers.  */
+     { GCC_INCLUDE_DIR, "GCC", 0, 0, 0, 0 },
+ #endif
+-#ifdef LOCAL_INCLUDE_DIR
+-    /* /usr/local/include comes before the fixincluded header files.  */
+-    { LOCAL_INCLUDE_DIR, 0, 0, 1, 1, 2 },
+-    { LOCAL_INCLUDE_DIR, 0, 0, 1, 1, 0 },
+-#endif
+ #ifdef PREFIX_INCLUDE_DIR
+     { PREFIX_INCLUDE_DIR, 0, 0, 1, 0, 0 },
+ #endif
+

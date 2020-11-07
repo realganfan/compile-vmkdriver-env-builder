@@ -1,0 +1,1 @@
+sources: gcc-4.8.0.tar.gz,gcc-asan.patch,gcc-collect2.patch,gcc-localinclude.patch,smallhigh.patch,gmp-5.0.5.tar.bz2,mpc-1.0.1.tar.gz,mpfr-3.0.1.tar.gz
