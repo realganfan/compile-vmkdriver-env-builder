@@ -1,0 +1,36 @@
+diff -Naur glibc-2.3.2-95.44.orig/usr/lib/libc.so glibc-2.3.2-95.44/usr/lib/libc.so
+--- glibc-2.3.2-95.44.orig/usr/lib/libc.so	Fri Jun 16 03:36:01 2006
++++ glibc-2.3.2-95.44/usr/lib/libc.so	Tue Jul 11 18:36:41 2006
+@@ -2,4 +2,4 @@
+    Use the shared library, but some functions are only in
+    the static library, so try that secondarily.  */
+ OUTPUT_FORMAT(elf32-i386)
+-GROUP ( /lib/libc.so.6 /usr/lib/libc_nonshared.a )
++GROUP ( gconv/../../../lib/libc.so.6 libc_nonshared.a gconv/../../../lib/ld-linux.so.2 )
+diff -Naur glibc-2.3.2-95.44.orig/usr/lib/libpthread.so glibc-2.3.2-95.44/usr/lib/libpthread.so
+--- glibc-2.3.2-95.44.orig/usr/lib/libpthread.so	Fri Jun 16 03:37:11 2006
++++ glibc-2.3.2-95.44/usr/lib/libpthread.so	Tue Jul 11 18:59:45 2006
+@@ -2,4 +2,4 @@
+    Use the shared library, but some functions are only in
+    the static library, so try that secondarily.  */
+ OUTPUT_FORMAT(elf32-i386)
+-GROUP ( /lib/libpthread.so.0 /usr/lib/libpthread_nonshared.a )
++GROUP ( gconv/../../../lib/libpthread.so.0 libpthread_nonshared.a )
+diff -Naur glibc-2.3.2-95.44.orig/usr/lib64/libc.so glibc-2.3.2-95.44/usr/lib64/libc.so
+--- glibc-2.3.2-95.44.orig/usr/lib64/libc.so	Fri Jun 16 03:28:10 2006
++++ glibc-2.3.2-95.44/usr/lib64/libc.so	Tue Jul 11 18:42:44 2006
+@@ -2,4 +2,4 @@
+    Use the shared library, but some functions are only in
+    the static library, so try that secondarily.  */
+ OUTPUT_FORMAT(elf64-x86-64)
+-GROUP ( /lib64/libc.so.6 /usr/lib64/libc_nonshared.a )
++GROUP ( gconv/../../../lib64/libc.so.6 libc_nonshared.a gconv/../../../lib64/ld-linux-x86-64.so.2 )
+diff -Naur glibc-2.3.2-95.44.orig/usr/lib64/libpthread.so glibc-2.3.2-95.44/usr/lib64/libpthread.so
+--- glibc-2.3.2-95.44.orig/usr/lib64/libpthread.so	Fri Jun 16 03:29:15 2006
++++ glibc-2.3.2-95.44/usr/lib64/libpthread.so	Tue Jul 11 19:00:01 2006
+@@ -2,4 +2,4 @@
+    Use the shared library, but some functions are only in
+    the static library, so try that secondarily.  */
+ OUTPUT_FORMAT(elf64-x86-64)
+-GROUP ( /lib64/libpthread.so.0 /usr/lib64/libpthread_nonshared.a )
++GROUP ( gconv/../../../lib64/libpthread.so.0 libpthread_nonshared.a )
